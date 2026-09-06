@@ -7,26 +7,47 @@ use Illuminate\Http\Request;
 
 class EmployeeController extends Controller
 {
-    // GET - Display all employees
-    public function index()
+    // GET - Display employees with pagination, search, and filtering
+    public function index(Request $request)
     {
-        $employees = Employee::all();
+        $query = Employee::with('department');
 
-        return response()->json($employees, 200);
+        if ($request->filled('search')) {
+            $search = $request->search;
+
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('department_id')) {
+            $query->where(
+                'department_id',
+                $request->department_id
+            );
+        }
+
+        return response()->json(
+            $query->paginate(10),
+            200
+        );
     }
 
     // POST - Create a new employee
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:employees,email',
-            'department' => 'required|string|max:100',
-            'position' => 'required|string|max:100',
+            'department_id' => 'required|exists:departments,id',
+            'position' => 'required|string|max:255',
         ]);
 
         $employee = Employee::create($validated);
+        $employee->load('department');
 
         return response()->json([
             'message' => 'Employee created successfully',
@@ -37,7 +58,7 @@ class EmployeeController extends Controller
     // GET - Display one employee
     public function show($id)
     {
-        $employee = Employee::find($id);
+        $employee = Employee::with('department')->find($id);
 
         if (!$employee) {
             return response()->json([
@@ -60,14 +81,15 @@ class EmployeeController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name' => 'sometimes|string|max:100',
-            'last_name' => 'sometimes|string|max:100',
-            'email' => 'sometimes|email|unique:employees,email,' . $id,
-            'department' => 'sometimes|string|max:100',
-            'position' => 'sometimes|string|max:100',
+            'first_name' => 'sometimes|required|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
+            'email' => 'sometimes|required|email|unique:employees,email,' . $id,
+            'department_id' => 'sometimes|required|exists:departments,id',
+            'position' => 'sometimes|required|string|max:255',
         ]);
 
         $employee->update($validated);
+        $employee->load('department');
 
         return response()->json([
             'message' => 'Employee updated successfully',
